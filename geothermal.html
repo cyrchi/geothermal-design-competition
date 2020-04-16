@@ -5,9 +5,16 @@
     <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Geothermal Design Challenge</title>
     
+    <!-- CSS libraries -->
     <!-- Using the light theme: https://developers.arcgis.com/javascript/latest/guide/styling/ -->
-    <link rel="stylesheet" href="https://js.arcgis.com/4.14/esri/themes/dark-red/main.css"> 
+    <link rel="stylesheet" href="https://js.arcgis.com/4.14/esri/themes/dark-red/main.css">
+    <!-- intro.js CSS -->
+    <!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intro.js/2.9.3/introjs.min.css"> -->
     <script src="https://js.arcgis.com/4.14/"></script>
+
+    
+    <!-- Meta tag to set the width across devices -->
+    <meta name="viewport" content="width=1024">
 
     <script>
         require([
@@ -19,7 +26,8 @@
             "esri/layers/FeatureLayer",
             "esri/widgets/Legend",
             "esri/widgets/Expand",
-            "esri/widgets/LayerList"
+            "esri/widgets/LayerList",
+            "esri/widgets/BasemapGallery"
           ], function(
               Map, 
               MapView, 
@@ -29,8 +37,12 @@
               FeatureLayer,
               Legend,
               Expand,
-              LayerList
+              LayerList,
+              BasemapGallery
             ) {
+
+        // When the app opens, submission data will be clustered.
+        let clusterActive = true
 
         // Configures clustering on the layer. This code must come before the featureReduction property.
         const clusterConfig = {
@@ -58,12 +70,26 @@
             }
         });
 
+        // creates a watchUtil on the zoom setting, to conditionally change clusterActive.
+        view.watch("zoom",function(zoom){
+            console.log(zoom)
+            if (zoom <= 5){
+                clusterActive = true
+                console.log(">5")
+                zoomToggleCluster()
+            }else{
+                clusterActive = false
+                zoomToggleCluster()
+            }
+        })
+
         // Create a Search widget
         const searchWidget = new Search({
+            container: "searchDiv",
             view: view
         });
         
-        // Adds the search widget below other elements in the top left corner of the view
+        // Adds the search widget to the top right corner of the view
         view.ui.add(searchWidget, {
         position: "top-right",
         index: 2
@@ -74,29 +100,24 @@
             view: view
         });
 
-        // adds the home widget to the top left corner of the MapView
+        // adds the home widget below other elements in the top right corner of the view
         view.ui.add(homeWidget, "top-right");
 
+        // Create a basemap toggle widget
+        var basemapGallery = new BasemapGallery({
+            view: view
+            });
+
+        // Add widget below other elements in the top right corner of the view
+        view.ui.add(
+            new Expand({
+                view: view,
+                content: basemapGallery,
+                expanded: false
+                }),
+                "top-right"
+                );
         
-        // Create a TimeSlider
-        var timeSlider = new TimeSlider({
-            container: "timeSliderDiv",
-            view: view, // set the TimeSlider's view property.
-            mode: "time-window",
-            fullTimeExtent: { // entire extent of the timeSlider
-                start: new Date(2012, 0, 1), // year,month starting from 0, day
-                end: new Date(2020, 2, 1)
-                },
-            values:[ // location of timeSlider thumbs
-                new Date(2012, 0, 1),
-                new Date(2020, 2, 1)
-            ]
-        });
-        
-        // Adds the time slider widget in the bottom left corner of the view
-        view.ui.add(timeSlider, {
-            position: "bottom-left"
-        });
 
         // Create a PopupTemplate for GDR submissions
         var featurePopup = {
@@ -128,8 +149,62 @@
         // Create a PopupTemplate for EGS potential
         var egsPopup = {
             title: "Enhanced Geothermal Potential Rating", 
-            content: "This region is rated <strong>{class}</strong> for EGS potential. <br><br>Ratings reflect EGS favorability with 1 being most favorable 5 being least favorable and 999 not having been assessed due to temperatures less than 150 degrees C at 10 km depth."
-            }
+            content: [
+                {
+                    type:"text",
+                    text:"This region is rated <strong>{class}</strong> for EGS potential. <br><br>Ratings reflect EGS favorability with 1 being most favorable 5 being least favorable and 999 not having been assessed due to temperatures less than 150 degrees C at 10 km depth."
+                },
+
+                // {
+                //     type: "media", 
+                //     mediaInfos: [
+                //         {
+                //             title: "<b>Test Title<b>",
+                                
+                //             type: "pie-chart",
+                //             caption: "Test",
+                //             value: {
+                //                 fields: "{class}/{gid}",
+                //                 normalizeField: null,
+                //                 tooltipField: "{class}"
+                //             }
+                //         }
+                //     ]
+                // }
+
+            ]
+        }
+
+        var indexPopup = {
+            title: "Research Potential Index",
+            content: [
+                {
+                    type:"text",
+                    text:"This region's research potential is <strong>{Research_Potential}</strong>, rated between 0 (low) and 1 (high)."
+                // },
+                // {
+                //     type:"fields",
+                //     fieldInfos: [
+                //         {
+                //             fieldName:"EGS_Favorability",
+                //             label:"EGS Favorability Index"
+                //         },
+                //         {
+                //             fieldName:"GDR_Submissions",
+                //             label:"GDR Submission Index"
+                //         },
+                //         {
+                //             fieldName:"Operating_Stations",
+                //             label:"Operating Stations Index"
+                //         },
+                //         {
+                //             fieldName:"Developing_Stations",
+                //             label:"Developing Stations Index"
+                //         }
+                //     ]
+                }
+            ]
+        }
 
         // Call Feature Layer Service from ArcGIS Online and add featureLayers to the map. Listed in drawing order.
         
@@ -145,6 +220,19 @@
 
         map.add(potentialLayer); 
 
+
+        // Research potential index grid feature layer (polygons)
+        var indexLayer = new FeatureLayer({
+            title: "Research Potential Index",
+            url: "https://services5.arcgis.com/njRHYVhl2CMXMsap/arcgis/rest/services/Research_Potential_Index/FeatureServer",
+            opacity: 0.5,
+            legendEnabled: false, // removes this layer from the legend
+            popupTemplate: indexPopup
+        });
+
+        map.add(indexLayer);
+
+
         // Submissions feature layer (points)
         var featureLayer = new FeatureLayer({
             title: "Geothermal Data Repository Submissions",
@@ -157,14 +245,6 @@
 
         map.add(featureLayer);
 
-        // US hex grid feature layer (polygons)
-        var hexLayer = new FeatureLayer({
-            url: "https://services5.arcgis.com/njRHYVhl2CMXMsap/arcgis/rest/services/US_hex_grid/FeatureServer",
-            legendEnabled: false // removes this layer from the legend
-        });
-
-        map.add(hexLayer);
-
 
         // Create a layer list widget
         var layerList = new LayerList({
@@ -174,8 +254,8 @@
 
                 var item = event.item;  // The event object contains properties of the layer in the LayerList widget
 
-                if (item.title === "US hex grid") {
-                    item.title = "High Potential Areas for Research"; // change the title
+                if (item.title === "Research Potential Index") {
+                    item.title = "Research Potential Index"; // change the title
                     item.visible = false; // default to not visible when opening the app
                     }
                 if (item.title === "Enhanced Geothermal Potential"){
@@ -189,7 +269,6 @@
         position: "top-left"
         });      
         
-
         
         // Create point clustering on featureLayer, with an enable/disable function
     
@@ -199,33 +278,27 @@
             container: "legendDiv"
             });
 
-
-        // // DEPRECATED_Configure expansion
-        // const infoDiv = document.getElementById("infoDiv");
-        //     view.ui.add(
-        //     new Expand({
-        //         view: view,
-        //         content: infoDiv,
-        //         expandIconClass: "esri-icon-layer-list",
-        //         expanded: false
-        //         }),
-        //         "top-left"
-        //         );
-
         
-        // To turn off clustering on a layer, set the featureReduction property to null
+        // Toggle clustering
         const toggleButton = document.getElementById("cluster");
 
-            toggleButton.addEventListener("click", function() {
-                let fr = featureLayer.featureReduction;
-            featureLayer.featureReduction =
-                fr && fr.type === "cluster" ? null : clusterConfig;
-            toggleButton.innerText =
-                toggleButton.innerText === 
-                "Enable Clustering"
-                ? "Disable Clustering" 
-                : "Enable Clustering";
-            });
+        toggleButton.addEventListener("click", function(event){
+            toggleCluster()
+        });
+
+        // DEPRECATED_To turn off clustering on a layer, set the featureReduction property to null
+        // const toggleButton = document.getElementById("cluster");
+
+        //     toggleButton.addEventListener("click", function() {
+        //         let fr = featureLayer.featureReduction;
+        //     featureLayer.featureReduction =
+        //         fr && fr.type === "cluster" ? null : clusterConfig;
+        //     toggleButton.innerText =
+        //         toggleButton.innerText === 
+        //         "Enable Clustering"
+        //         ? "Disable Clustering" 
+        //         : "Enable Clustering";
+        //     });
 
         // Add legend to the bottom right corner of the view
           view.ui.add(legend, "top-left");
@@ -233,6 +306,7 @@
         
         // Create a UI element with filter expressions. 
         var sqlExpressions = [
+            "Filter", // instead of a label
             "status IS NOT NULL", // returns all data
             "status = 'Publicly accessible'",
             "direct_use = 'TRUE'",
@@ -240,34 +314,53 @@
             "forge = 'TRUE'",
             "hydrothermal = 'TRUE'"
         ];
-
+        
         var selectFilter = document.createElement("select");
             selectFilter.setAttribute("class", "esri-widget esri-select");
-            selectFilter.setAttribute("style", " width: 300px; font-family: Avenir Next W00; font-size: 1em;");
+            // Setting the style of the filter element; not a great solution to the *need a label* problem
+            selectFilter.setAttribute("style", "width: 300px; font-family: Avenir Next W00; font-size: 1em; color: #242424; background-color: #FF642E");
+            selectFilter.setAttribute("container", "filterDiv");
+
             sqlExpressions.forEach(function(sql){
                 var option = document.createElement("option");
                     option.value = sql;
                     option.innerHTML = sql;
-                        if (sql === "status IS NOT NULL") { // change label of sql expressions
-                            option.innerHTML = "All Submissions"
+                        if (sql === "Filter") { // workaround for setting a label/title for the filter widget
+                            option.innerHTML = "Filter Submissions by Type", // change label of sql expressions
+                            option.style.backgroundColor = "#242424", // workaround for styling the filter widget
+                            option.style.color = "#EFEFEF"
+                        }
+                        if (sql === "status IS NOT NULL") {
+                            option.innerHTML = "All Submissions",
+                            option.style.backgroundColor = "#242424",
+                            option.style.color = "#EFEFEF"
                         }
                         if (sql === "status = 'Publicly accessible'") {
-                            option.innerHTML = "Publicly Accessible"
+                            option.innerHTML = "Publicly Accessible",
+                            option.style.backgroundColor = "#242424",
+                            option.style.color = "#EFEFEF"
                         }
                         if (sql === "direct_use = 'TRUE'") {
-                            option.innerHTML = "Direct Use"
+                            option.innerHTML = "Direct Use",
+                            option.style.backgroundColor = "#242424",
+                            option.style.color = "#EFEFEF"
                         }
                         if (sql === "egs = 'TRUE'") {
-                            option.innerHTML = "Enhanced Geothermal Systems"
+                            option.innerHTML = "Enhanced Geothermal Systems",
+                            option.style.backgroundColor = "#242424",
+                            option.style.color = "#EFEFEF"
                         }
                         if (sql === "forge = 'TRUE'") {
-                            option.innerHTML = "FORGE"
+                            option.innerHTML = "FORGE",
+                            option.style.backgroundColor = "#242424",
+                            option.style.color = "#EFEFEF"
                         }
                         if (sql === "hydrothermal = 'TRUE'") {
-                            option.innerHTML = "Hydrothermal"
+                            option.innerHTML = "Hydrothermal",
+                            option.style.backgroundColor = "#242424",
+                            option.style.color = "#EFEFEF"
                         }
                         
-    
                     selectFilter.appendChild(option);
                 });
         
@@ -286,6 +379,57 @@
                 };
             });
         }
+
+        // Cluster toggle functions
+        function zoomToggleCluster(){
+            if (clusterActive){
+                console.log("cluster OFF") // writes a message to log on the debugging console
+                featureLayer.featureReduction  = clusterConfig
+                toggleButton.innerText = "Disable Clustering"
+                // clusterActive = false
+            }else{
+                
+                console.log("cluster ON") // writes a message to log on the debugging console
+                featureLayer.featureReduction = null;
+                toggleButton.innerText = "Enable Clustering"
+                // clusterActive = true
+            }
+        }
+
+
+        function toggleCluster(){
+            if (clusterActive){
+                featureLayer.featureReduction = null;
+                toggleButton.innerText = "Enable Clustering"
+                clusterActive = true
+            }else{
+                featureLayer.featureReduction  = clusterConfig;
+                toggleButton.innerText = "Disable Clustering"
+                clusterActive = false
+            }
+        }
+
+        // Create a TimeSlider
+        var timeSlider = new TimeSlider({
+            container: "timeSliderDiv",
+            view: view, // set the TimeSlider's view property.
+            mode: "time-window",
+            fullTimeExtent: { // entire extent of the timeSlider
+                start: new Date(2012, 0, 1), // year,month starting from 0, day
+                end: new Date(2020, 2, 1)
+                },
+            values:[ // location of timeSlider thumbs
+                new Date(2012, 0, 1),
+                new Date(2020, 2, 1)
+            ]
+        });
+        
+        // Adds the time slider widget in the bottom left corner of the view
+        view.ui.add(timeSlider, {
+            position: "top-left"
+        });
+
+
     });
     </script>
 
@@ -304,10 +448,24 @@
   <body>
 
     <div id="viewDiv"></div>
+        <div id="searchDiv"></div>
         <div id="timeSliderDiv"></div>
-        <!-- <div id="infoDiv" class="esri-widget"> -->
-        <div id="legendDiv">
-            <button id="cluster" class="esri-button">Disable Clustering</button>
+            <div id="legendDiv">
+                <button id="cluster" class="esri-button">Disable Clustering</button>
+                <!-- Test button to start intro.js   -->
+                <!-- <button id="flexi_form_start" href="javascript:void(0);" class="esri-button">Start Tour</button> -->
+            </div>
+            <div id="filterDiv"></div>
         </div>
-  </body>
+    
+    <script src="https://code.jquery.com/jquery-3.4.1.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/intro.js/2.9.3/intro.min.js"></script>
+    <!-- <script>
+        // initialize intro.js
+        $("#flexi_form_start").click(function() {
+          introJs().start();
+        });
+      </script>  -->
+
+ </body>
 </html>
