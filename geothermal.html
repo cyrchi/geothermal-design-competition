@@ -2,19 +2,21 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>Geothermal Design Challenge</title>
+    <!-- Meta tag to set the width across devices -->
+    <meta name="viewport" content="width=1024">
+    <!-- <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no"> -->
+
+    <title>Geothermal Data Repository Submissions</title>
     
     <!-- CSS libraries -->
-    <!-- Using the light theme: https://developers.arcgis.com/javascript/latest/guide/styling/ -->
-    <link rel="stylesheet" href="https://js.arcgis.com/4.14/esri/themes/dark-red/main.css">
+    <!-- Using the dark-red theme: https://developers.arcgis.com/javascript/latest/guide/styling/ -->
+    <link rel="stylesheet" href="https://js.arcgis.com/4.14/esri/themes/light/main.css">
+
     <!-- intro.js CSS -->
     <!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intro.js/2.9.3/introjs.min.css"> -->
     <script src="https://js.arcgis.com/4.14/"></script>
 
-    
-    <!-- Meta tag to set the width across devices -->
-    <meta name="viewport" content="width=1024">
+
 
     <script>
         require([
@@ -50,20 +52,20 @@
           clusterRadius: "50px", // Indicates an area comprising screen space 50px from the center of the cluster
           // {cluster_count} is an aggregate field containing the number of features comprised by the cluster
           popupTemplate: {
-            content: "This cluster represents {cluster_count} submissions to the Geothermal Data Repository."
+            content: "This cluster represents <b>{cluster_count} submissions</b> to the Geothermal Data Repository. Zoom in to see individual submissions."
           }
         };
 
         // Basemap
         var map = new Map({
-            basemap: "dark-gray"
+            basemap: "gray"
           });
       
         // Map div
         var view = new MapView({
             container: "viewDiv",
             map: map,
-            center: [-110.5795, 37.8283], // longitude, latitude
+            center: [-115.5795, 37.8283], // longitude, latitude
             zoom: 4,
             ui: {
             components: ["attribution"] // removes the +/- zoom widget
@@ -212,8 +214,8 @@
         var potentialLayer = new FeatureLayer({
             title: "Enhanced Geothermal Potential",
             url: "https://services5.arcgis.com/njRHYVhl2CMXMsap/arcgis/rest/services/EGS_Favorability/FeatureServer",
-            opacity: 0.5, // makes the layer 50% transparent
-            legendEnabled: false,
+            opacity: 0.75, // makes the layer 50% transparent
+            legendEnabled: true,
             popupTemplate: egsPopup, // enable popupTemplate on this layer
 
             });
@@ -225,8 +227,8 @@
         var indexLayer = new FeatureLayer({
             title: "Research Potential Index",
             url: "https://services5.arcgis.com/njRHYVhl2CMXMsap/arcgis/rest/services/Research_Potential_Index/FeatureServer",
-            opacity: 0.5,
-            legendEnabled: false, // removes this layer from the legend
+            opacity: 0.75,
+            legendEnabled: true, // removes this layer from the legend
             popupTemplate: indexPopup
         });
 
@@ -237,7 +239,7 @@
         var featureLayer = new FeatureLayer({
             title: "Geothermal Data Repository Submissions",
             url: "https://services5.arcgis.com/njRHYVhl2CMXMsap/arcgis/rest/services/Geothermal_Design_Challenge/FeatureServer",
-            listMode: "hide", // do not show this layer in the LayerList; not available to toggle
+            // listMode: "hide", // do not show this layer in the LayerList; not available to toggle
             outFields:["*"], // return all fields in this layer
             popupTemplate: featurePopup, // enable popupTemplate on this layer
             featureReduction: clusterConfig // defined above
@@ -249,6 +251,7 @@
         // Create a layer list widget
         var layerList = new LayerList({
             view: view,
+            container: "layerListDiv",
                 // executes for each ListItem in the LayerList
                 listItemCreatedFunction: function (event) {
 
@@ -265,12 +268,9 @@
             });
 
         // Adds widget below other elements in the top left corner of the view
-        view.ui.add(layerList, {
-        position: "top-left"
-        });      
-        
-        
-        // Create point clustering on featureLayer, with an enable/disable function
+        view.ui.add(layerList, "top-left");
+
+    
     
         // Create legend
         const legend = new Legend({
@@ -278,7 +278,7 @@
             container: "legendDiv"
             });
 
-        
+        // Create point clustering on featureLayer, with an enable/disable function
         // Toggle clustering
         const toggleButton = document.getElementById("cluster");
 
@@ -300,7 +300,7 @@
         //         : "Enable Clustering";
         //     });
 
-        // Add legend to the bottom right corner of the view
+        // Add legend to the top-left corner of the view
           view.ui.add(legend, "top-left");
 
         
@@ -318,8 +318,13 @@
         var selectFilter = document.createElement("select");
             selectFilter.setAttribute("class", "esri-widget esri-select");
             // Setting the style of the filter element; not a great solution to the *need a label* problem
-            selectFilter.setAttribute("style", "width: 300px; font-family: Avenir Next W00; font-size: 1em; color: #242424; background-color: #FF642E");
+            selectFilter.setAttribute("style", "width: 375px; font-family: Avenir Next W00; font-size: 1em; color: #ffffff; background-color: #0079C1");
             selectFilter.setAttribute("container", "filterDiv");
+
+            // #242424 dark grey
+            // #ADADAD medium grey for button background
+            // #EFEFEF light grey/white for lettering
+            // #FF642E esri red-orange
 
             sqlExpressions.forEach(function(sql){
                 var option = document.createElement("option");
@@ -327,38 +332,38 @@
                     option.innerHTML = sql;
                         if (sql === "Filter") { // workaround for setting a label/title for the filter widget
                             option.innerHTML = "Filter Submissions by Type", // change label of sql expressions
-                            option.style.backgroundColor = "#242424", // workaround for styling the filter widget
-                            option.style.color = "#EFEFEF"
+                            option.style.backgroundColor = "#ffffff", // workaround for styling the filter widget
+                            option.style.color = "#5E5E5E"
                         }
                         if (sql === "status IS NOT NULL") {
                             option.innerHTML = "All Submissions",
-                            option.style.backgroundColor = "#242424",
-                            option.style.color = "#EFEFEF"
+                            option.style.backgroundColor = "#F4F9FC",
+                            option.style.color = "#5E5E5E"
                         }
                         if (sql === "status = 'Publicly accessible'") {
                             option.innerHTML = "Publicly Accessible",
-                            option.style.backgroundColor = "#242424",
-                            option.style.color = "#EFEFEF"
+                            option.style.backgroundColor = "#F4F9FC",
+                            option.style.color = "#5E5E5E"
                         }
                         if (sql === "direct_use = 'TRUE'") {
                             option.innerHTML = "Direct Use",
-                            option.style.backgroundColor = "#242424",
-                            option.style.color = "#EFEFEF"
+                            option.style.backgroundColor = "#F4F9FC",
+                            option.style.color = "#5E5E5E"
                         }
                         if (sql === "egs = 'TRUE'") {
                             option.innerHTML = "Enhanced Geothermal Systems",
-                            option.style.backgroundColor = "#242424",
-                            option.style.color = "#EFEFEF"
+                            option.style.backgroundColor = "#F4F9FC",
+                            option.style.color = "#5E5E5E"
                         }
                         if (sql === "forge = 'TRUE'") {
                             option.innerHTML = "FORGE",
-                            option.style.backgroundColor = "#242424",
-                            option.style.color = "#EFEFEF"
+                            option.style.backgroundColor = "#F4F9FC",
+                            option.style.color = "#5E5E5E"
                         }
                         if (sql === "hydrothermal = 'TRUE'") {
                             option.innerHTML = "Hydrothermal",
-                            option.style.backgroundColor = "#242424",
-                            option.style.color = "#EFEFEF"
+                            option.style.backgroundColor = "#F4F9FC",
+                            option.style.color = "#5E5E5E"
                         }
                         
                     selectFilter.appendChild(option);
@@ -400,11 +405,11 @@
         function toggleCluster(){
             if (clusterActive){
                 featureLayer.featureReduction = null;
-                toggleButton.innerText = "Enable Clustering"
+                toggleButton.innerText = "Zoom out to enable clustering"
                 clusterActive = true
             }else{
                 featureLayer.featureReduction  = clusterConfig;
-                toggleButton.innerText = "Disable Clustering"
+                toggleButton.innerText = "Zoom in to disable clustering"
                 clusterActive = false
             }
         }
@@ -422,13 +427,13 @@
                 new Date(2012, 0, 1),
                 new Date(2020, 2, 1)
             ]
+
         });
         
         // Adds the time slider widget in the bottom left corner of the view
         view.ui.add(timeSlider, {
             position: "top-left"
         });
-
 
     });
     </script>
@@ -441,21 +446,28 @@
         width: 100%;
       }
 
+      #legendDiv {
+        width: 375px;
+      }
+
+      #layerListDiv {
+          width: 375px;
+      }
+
     </style>
 
   </head>
 
   <body>
-
     <div id="viewDiv"></div>
         <div id="searchDiv"></div>
         <div id="timeSliderDiv"></div>
-            <div id="legendDiv">
-                <button id="cluster" class="esri-button">Disable Clustering</button>
-                <!-- Test button to start intro.js   -->
-                <!-- <button id="flexi_form_start" href="javascript:void(0);" class="esri-button">Start Tour</button> -->
-            </div>
-            <div id="filterDiv"></div>
+        <div id="layerListDiv"></div>
+        <div id="legendDiv">
+            <button id="cluster" class="esri-button">Disable Clustering</button>
+            <!-- Test button to start intro.js   -->
+            <!-- <button id="flexi_form_start" href="javascript:void(0);" class="esri-button">Start Tour</button> -->
+        </div>
         </div>
     
     <script src="https://code.jquery.com/jquery-3.4.1.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
