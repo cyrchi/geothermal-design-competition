@@ -1,6 +1,6 @@
 # geothermal-design-competition
 
-<h1><a href="https://terpconnect.umd.edu/~eread781/Geothermal/index.html">Geothermal Data Repository Map</a></h1>
+<a href="https://terpconnect.umd.edu/~eread781/Geothermal/index.html"># geothermal-design-competition</a>
 
 Submission to the <a href="https://inl.gov/geothermalchallenge/">2020 Geothermal Design Competition</a> from the US Department of Energy through the Idaho National Laboratory.
 
