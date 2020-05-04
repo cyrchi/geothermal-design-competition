@@ -1,4 +1,4 @@
-# geothermal-design-challenge
+# geothermal-design-competition
 
 <h1><a href="https://terpconnect.umd.edu/~eread781/Geothermal/index.html">Geothermal Data Repository Submission Map</a></h1>
 
