@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Geothermal Design Project | Sources</title>
+<link rel= "stylesheet" href= "css/methodology.css">
+
+</head>
+
+<body>
+<h1>
+  How did we make the map?
+</h1>
+<p>
+    To review the code behind our project, check out the <a href= "https://github.com/cyrchi/geothermal-design-competition"target="_blank">GitHub repository</a>. The following is a brief overview of how our project fits together:
+</p>
+<p>
+    First, we accessed the <a href= "https://gdr.openei.org/api?action=getSubmissionsWithPermissionsForUser&s=all&format=json"target="_blank">raw metadata</a> from the Geothermal Data Repository (GDR) in JSON format. Using a Python script, we extracted the information we needed from the metadata, and used ArcGIS Pro to turn it into a feature class and do the analysis necessary to create the Research Impact Potential data. We added these two data layers, as well as the “Deep Enhanced Geothermal Potential” layer from National Renewable Energy Laboratory’s <a href= "https://maps.nrel.gov/geothermal-prospector/?aL=0&bL=clight&cE=0&lR=0&mC=35.06597313798418%2C-96.1962890625&zL=4"target="_blank">Geothermal Prospector</a>, to ArcGIS Online as hosted feature layers. Once securing the data for our map, we went to work on creating our web page and interactive GIS application. We custom-built both the web page, starting from a Bootstrap template, and the GIS application, using the ArcGIS API for Javascript 4.14. 
+</p>
+<p>
+    A few things require a more detailed explanation:
+</p>
+<h3>
+1. Topic Filters
+</h3>
+<p>
+    In the map, you can filter the GDR submissions using a few predefined filters. These filters work by querying the ArcGIS Online hosted feature layer of GDR submissions using SQL. For the Direct Use, EGS, FORGE, and Hydrothermal features, we created new fields in the GDR submission data. We calculated each field to equal “TRUE” if either the “submission_name” or “keywords'' fields contained the relevant category or some variation thereof. For instance, in the “egs” field of the GDR submission data, if the “submission_name” or “keywords'' fields for a record contained “egs”, “enhanced”, or “enhanced geothermal”, the “egs” field for that record would equal “TRUE”. If it did not contain any of those strings, it would equal “FALSE”.
+</p>
+<table style="width:70%">
+    <tr>
+      <th>Filter</th>
+      <th>SQL Statement (after WHERE)</th> 
+      <th>Explanation</th>
+    </tr>
+    <tr>
+      <td>All submissions</td>
+      <td id=sql>status IS NOT null</td> 
+      <td>Returns all the GDR submissions where the “status” field has any value.</td>
+    </tr>
+    <tr>
+      <td>Publicly Accessible</td>
+      <td id=sql>Status = ‘Publicly accessible’</td> 
+      <td>Returns only the GDR submissions where the “status” field value is “Publicly accessible”</td>
+    </tr>
+    <tr>
+        <td>Direct Use</td>
+        <td id=sql>direct_use = ‘TRUE’</td> 
+        <td>Returns only the GDR submissions where the “direct_use” field value is “TRUE”</td>
+      </tr>
+      <tr>
+        <td>EGS</td>
+        <td id=sql>egs = ‘TRUE’</td> 
+        <td>Returns only the GDR submissions where the “egs” field value is “TRUE”</td>
+      </tr>
+      <tr>
+        <td>FORGE</td>
+        <td id=sql>forge = ‘TRUE’</td> 
+        <td>Returns only the GDR submissions where the “forge” field value is “TRUE”</td>
+      </tr>
+      <tr>
+        <td>Hydrothermal</td>
+        <td id=sql>hydrothermal = ‘TRUE’</td> 
+        <td>Returns only the GDR submissions where the “hydrothermal” field value is “TRUE”
+        </td>
+      </tr>
+  </table>
+
+<h3>
+  2. Research Impact Potential
+</h3>
+<p>
+    We did our own analysis to create the Research Impact Potential data layer, available in the map. Research Impact Potential is represented by an index, calculated using several other sources of data. First, we created a hexagon tessellation to cover the continental US. Each hex in the grid covers an area of 2500 square miles. Then we calculated the index to each hex. The calculation of the index and classification of the component data layers are shown below.
+</p>
+<p>
+Research Impact Potential = 
+0.35 * (EGS_Potential) + 0.35 * (GDR_Submissions) + 0.15 * (Operating_Geothermal_Stations) + 0.15 * (Developing_Geothermal_Stations)
+
+</p>
+<table style="width:85%" id="tab2">
+    <tr>
+      <th>Data Layer</th>
+      <th>Analysis</th> 
+      <th>Assumptions</th>
+      <th>Weight</th>
+      <th>Classification</th>
+    </tr>
+    <tr>
+      <td>EGS_Potential</td>
+      <td>Summarize average class within each hex from the EGS potential layer (excluding any records where class =999)</td> 
+      <td>The higher the EGS potential, the more we want to research whether to develop geothermal resources there.</td>
+      <td>35%</td>
+      <td>Attribute = class<br>
+        Between 1 and 2 = 1<br>
+        Between 2 and 3 = 0.75<br>
+        Between 3 and 4 = 0.50<br>
+        Between 4 and 5 = 0.25<br>
+        5 = 0
+        </td>
+    </tr>
+    <tr>
+      <td>GDR_Submissions</td>
+      <td>Summarize the number of GDR Submissions in each hex from the GDR submissions layer.</td> 
+      <td>The less research there is about an area, the higher impact research has.”</td>
+      <td>35%</td>
+      <td>Attribute = count<br>
+        Less than 1 submission = 1<br>
+        Between 1 and 3 submissions = 0.75<br>
+        Between 3 and 10 submissions = 0.50<br>
+        Between 10 and 50 submissions = 0.25<br>
+        More than 50 submissions = 0
+        </td>
+    </tr>
+    <tr>
+        <td>Operating_Geothermal_Stations</td>
+        <td>Summarize the number of operating geothermal stations in each hex from the Operating_Geothermal_Stations layer.</td> 
+        <td>If there is already a geothermal station in the area, it is likely that the area has already been thoroughly explored, and new research would have a lower impact.</td>
+        <td>15%</td>
+        <td>1: No currently operating stations<br>
+            0: Currently operating stations<br>
+        </td>
+      </tr>
+      <tr>
+        <td>Developing_Geothermal_Stations</td>
+        <td>Summarize the number of developing geothermal stations in each hex from the Developing_Geothermal_Stations layer.</td> 
+        <td>If there is a geothermal station in development in the area, it is likely that the area has already been thoroughly explored, and new research would have a lower impact.</td>
+        <td>15%</td>
+        <td>1: No currently developing stations<br>
+            0: Currently developing stations
+            </td>
+      </tr>
+  </table>
+
+</body>
+
+</html>

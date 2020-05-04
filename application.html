@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <!-- Meta tag to set the width across devices -->
+    <meta name="viewport" content="width=1024">
+
+    <title>Geothermal Data Repository Submissions</title>
+
+    <!-- CSS libraries -->
+    <!-- Using the the light theme: https://developers.arcgis.com/javascript/latest/guide/styling/ -->
+    <link rel="stylesheet" href="https://js.arcgis.com/4.14/esri/themes/light/main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intro.js/2.9.3/introjs.min.css">
+    <link rel="stylesheet" href="sweetalert2.min.css">
+    <!-- Font Awesome Icons -->
+    <link href="vendor/fontawesome-free/css/all.min.css" rel="stylesheet" type="text/css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css?family=Merriweather+Sans:400,700" rel="stylesheet">
+    <link href='https://fonts.googleapis.com/css?family=Merriweather:400,300,300italic,400italic,700,700italic' rel='stylesheet' type='text/css'>
+    <!-- Plugin CSS -->
+    <!--link href="vendor/magnific-popup/magnific-popup.css" rel="stylesheet"-->
+    <!-- Theme CSS - Includes Bootstrap -->
+    <link href="css/creative.min.css" rel="stylesheet">
+
+    <!-- Javascript libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@9"></script>
+    <script src="sweetalert2.all.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/intro.js/2.9.3/intro.min.js"></script>
+    <!-- must be at the bottom of the list -->
+    <script src="https://js.arcgis.com/4.14/"></script>
+
+    <script>
+        require([
+            "esri/Map",
+            "esri/views/MapView",
+            "esri/widgets/Search",
+            "esri/widgets/Home",
+            "esri/widgets/TimeSlider",
+            "esri/layers/FeatureLayer",
+            "esri/widgets/Legend",
+            "esri/widgets/Expand",
+            "esri/widgets/LayerList",
+            "esri/widgets/BasemapGallery"
+        ], function(
+            Map,
+            MapView,
+            Search,
+            Home,
+            TimeSlider,
+            FeatureLayer,
+            Legend,
+            Expand,
+            LayerList,
+            BasemapGallery
+        ) {
+
+            // When the app opens, submission data will be clustered.
+            let clusterActive = true
+
+            // Configures clustering on the layer. This code must come before the featureReduction property.
+            const clusterConfig = {
+                type: "cluster",
+                clusterRadius: "50px", // Indicates an area comprising screen space 50px from the center of the cluster
+                // {cluster_count} is an aggregate field containing the number of features comprised by the cluster
+                popupTemplate: {
+                    content: "This cluster represents <b>{cluster_count} submissions</b> to the Geothermal Data Repository. Zoom in to see individual submissions."
+                }
+            };
+
+            // Basemap
+            var map = new Map({
+                basemap: "gray"
+            });
+
+            // Map div
+            var view = new MapView({
+                container: "viewDiv",
+                map: map,
+                center: [-115.5795, 37.8283], // longitude, latitude
+                zoom: 4,
+                ui: {
+                    components: ["attribution"] // removes the +/- zoom widget
+                }
+            });
+
+            // creates a watchUtil on the zoom setting, to conditionally change clusterActive.
+            view.watch("zoom", function(zoom) {
+                console.log(zoom)
+                if (zoom <= 5) {
+                    clusterActive = true
+                    console.log(">5")
+                    zoomToggleCluster()
+                } else {
+                    clusterActive = false
+                    zoomToggleCluster()
+                }
+            })
+
+            // Create a Search widget
+            const searchWidget = new Search({
+                container: "searchDiv",
+                view: view
+            });
+
+            // Adds the search widget to the top right corner of the view
+            view.ui.add(searchWidget, {
+                position: "top-right",
+                index: 2
+            });
+
+            // Create a home widget
+            var homeWidget = new Home({
+                container: "homeDiv",
+                view: view
+            });
+
+            // adds the home widget below other elements in the top right corner of the view
+            view.ui.add(homeWidget, "top-right");
+
+            // Create a basemap toggle widget
+            var basemapGallery = new BasemapGallery({
+                view: view
+            });
+
+            // Add widget below other elements in the top right corner of the view
+            view.ui.add(
+                new Expand({
+                    view: view,
+                    container: "galleryDiv",
+                    content: basemapGallery,
+                    expanded: false
+                }),
+                "top-right"
+            );
+
+
+            // Create a PopupTemplate for GDR submissions
+            var featurePopup = {
+                title: "{submission_name}",
+                content: [{
+                    type: "fields",
+                    fieldInfos: [{
+                        fieldName: "url",
+                        label: "Submission URL"
+                    }, {
+                        fieldName: "status",
+                        label: "Availability Status"
+                    }, {
+                        fieldName: "resource_name",
+                        label: "Resource Name"
+                    }, {
+                        fieldName: "created_date",
+                        label: "Date Submitted"
+                    }]
+                }]
+            }
+
+            // Create a PopupTemplate for EGS potential
+            var egsPopup = {
+                title: "Enhanced Geothermal Potential Rating",
+                content: [{
+                    type: "text",
+                    text: "This region is rated <strong>{class}</strong> for EGS potential. <br><br>Ratings reflect EGS favorability with 1 being most favorable 5 being least favorable and 999 not having been assessed due to temperatures less than 150 degrees C at 10 km depth."
+                }, ]
+            }
+
+            var indexPopup = {
+                title: "Research Impact Potential",
+                content: [{
+                    type: "text",
+                    text: "This region's research impact potential is <strong>{Research_Potential}</strong>, rated between 0 (low) and 1 (high)."
+                }]
+            }
+
+            // Call Feature Layer Service from ArcGIS Online and add featureLayers to the map. Listed in drawing order.
+
+            // EGS potential feature layer (polygons)
+            var potentialLayer = new FeatureLayer({
+                title: "Enhanced Geothermal Potential",
+                url: "https://services5.arcgis.com/njRHYVhl2CMXMsap/arcgis/rest/services/EGS_Favorability/FeatureServer",
+                opacity: 0.75, // makes the layer 50% transparent
+                legendEnabled: true,
+                popupTemplate: egsPopup, // enable popupTemplate on this layer
+
+            });
+
+            map.add(potentialLayer);
+
+
+            // Research impact potential index grid feature layer (polygons)
+            var indexLayer = new FeatureLayer({
+                title: "Research Impact Potential",
+                url: "https://services5.arcgis.com/njRHYVhl2CMXMsap/arcgis/rest/services/Research_Potential_Index/FeatureServer",
+                opacity: 0.75,
+                legendEnabled: true, // removes this layer from the legend
+                popupTemplate: indexPopup,
+            });
+
+            map.add(indexLayer);
+
+
+            // Submissions feature layer (points)
+            var featureLayer = new FeatureLayer({
+                title: "Geothermal Data Repository Submissions",
+                url: "https://services5.arcgis.com/njRHYVhl2CMXMsap/arcgis/rest/services/Geothermal_Design_Challenge/FeatureServer",
+                // listMode: "hide", // do not show this layer in the LayerList; not available to toggle
+                outFields: ["*"], // return all fields in this layer
+                popupTemplate: featurePopup, // enable popupTemplate on this layer
+                featureReduction: clusterConfig // defined above
+            });
+
+            map.add(featureLayer);
+
+
+            // Create a layer list widget
+            var layerList = new LayerList({
+                view: view,
+                container: "layerListDiv",
+                // executes for each ListItem in the LayerList
+                listItemCreatedFunction: function(event) {
+
+                    var item = event.item; // The event object contains properties of the layer in the LayerList widget
+
+                    if (item.title === "Research Impact Potential") {
+                        item.title = "Research Impact Potential"; // change the title
+                        item.visible = false; // default to not visible when opening the app
+                    }
+                    if (item.title === "Enhanced Geothermal Potential") {
+                        item.visible = false;
+                    }
+                }
+            });
+
+            // Adds widget below other elements in the top left corner of the view
+            view.ui.add(layerList, "top-left");
+
+
+
+            // Create legend
+            const legend = new Legend({
+                view: view,
+                container: "legendDiv"
+            });
+
+            // Create point clustering on featureLayer, with an enable/disable function
+            // Toggle clustering
+            const toggleButton = document.getElementById("cluster");
+
+            toggleButton.addEventListener("click", function(event) {
+                toggleCluster()
+            });
+
+            // DEPRECATED_To turn off clustering on a layer, set the featureReduction property to null
+            // const toggleButton = document.getElementById("cluster");
+
+            //     toggleButton.addEventListener("click", function() {
+            //         let fr = featureLayer.featureReduction;
+            //     featureLayer.featureReduction =
+            //         fr && fr.type === "cluster" ? null : clusterConfig;
+            //     toggleButton.innerText =
+            //         toggleButton.innerText === 
+            //         "Enable Clustering"
+            //         ? "Disable Clustering" 
+            //         : "Enable Clustering";
+            //     });
+
+            // Add legend to the top-left corner of the view
+            view.ui.add(legend, "top-left");
+
+
+            // Create a UI element with filter expressions. 
+            var sqlExpressions = [
+                "Filter", // instead of a label
+                "status IS NOT NULL", // returns all data
+                "status = 'Publicly accessible'",
+                "direct_use = 'TRUE'",
+                "egs = 'TRUE'",
+                "forge = 'TRUE'",
+                "hydrothermal = 'TRUE'"
+            ];
+
+
+
+            var selectFilter = document.createElement("select");
+            selectFilter.setAttribute("id", "filterDiv");
+            selectFilter.setAttribute("class", "esri-widget esri-select");
+            selectFilter.setAttribute("data-step", "5");
+            selectFilter.setAttribute("data-intro", "Click here to filter the GDR submission data by category. It helps to disable clustering when you do this.");
+            selectFilter.setAttribute("data-tooltipClass", "tooltip");
+            selectFilter.setAttribute("data-position", "right");
+
+            sqlExpressions.forEach(function(sql) {
+                var option = document.createElement("option");
+                option.setAttribute("id", "optionDiv");
+                option.value = sql;
+                option.innerHTML = sql;
+                if (sql === "Filter") { // workaround for setting a label/title for the filter widget
+                    option.innerHTML = "Filter Submissions by Type" // change label of sql expressions
+                }
+                if (sql === "status IS NOT NULL") {
+                    option.innerHTML = "All Submissions"
+                }
+                if (sql === "status = 'Publicly accessible'") {
+                    option.innerHTML = "Publicly Accessible"
+                }
+                if (sql === "direct_use = 'TRUE'") {
+                    option.innerHTML = "Direct Use"
+                }
+                if (sql === "egs = 'TRUE'") {
+                    option.innerHTML = "EGS"
+                }
+                if (sql === "forge = 'TRUE'") {
+                    option.innerHTML = "FORGE"
+                }
+                if (sql === "hydrothermal = 'TRUE'") {
+                    option.innerHTML = "Hydrothermal"
+                }
+
+                selectFilter.appendChild(option);
+            });
+
+            // adds filter under other components in the top left side of the view
+            view.ui.add(selectFilter, "top-left");
+
+            selectFilter.addEventListener('change', function(event) {
+                setFeatureLayerViewFilter(event.target.value); // Client side
+            });
+
+            // Client side filter
+            function setFeatureLayerViewFilter(expression) {
+                view.whenLayerView(featureLayer).then(function(featureLayerView) {
+                    featureLayerView.filter = {
+                        where: expression
+                    };
+                });
+            }
+
+            // Cluster toggle functions
+            function zoomToggleCluster() {
+                if (clusterActive) {
+                    console.log("cluster OFF") // writes a message to log on the debugging console
+                    featureLayer.featureReduction = clusterConfig
+                    toggleButton.innerText = "Disable Clustering"
+                        // clusterActive = false
+                } else {
+
+                    console.log("cluster ON") // writes a message to log on the debugging console
+                    featureLayer.featureReduction = null;
+                    toggleButton.innerText = "Enable Clustering"
+                        // clusterActive = true
+                }
+            }
+
+
+            function toggleCluster() {
+                if (clusterActive) {
+                    featureLayer.featureReduction = null;
+                    toggleButton.innerText = "Zoom out to enable clustering"
+                    clusterActive = true
+                } else {
+                    featureLayer.featureReduction = clusterConfig;
+                    toggleButton.innerText = "Zoom in to disable clustering"
+                    clusterActive = false
+                }
+            }
+
+            // Create a TimeSlider
+            var timeSlider = new TimeSlider({
+                container: "timeSliderDiv",
+                view: view, // set the TimeSlider's view property.
+                mode: "time-window",
+                fullTimeExtent: { // entire extent of the timeSlider
+                    start: new Date(2012, 0, 1), // year,month starting from 0, day
+                    end: new Date(2020, 2, 1)
+                },
+                values: [ // location of timeSlider thumbs
+                    new Date(2012, 0, 1),
+                    new Date(2020, 2, 1)
+                ]
+
+            });
+
+            // Adds the time slider widget in the bottom left corner of the view
+            view.ui.add(timeSlider, {
+                position: "top-left"
+            });
+
+        });
+    </script>
+
+    <style>
+        html,
+        body,
+        #viewDiv {
+            padding: 0;
+            margin: 0;
+            height: 100%;
+            width: 100%;
+        }
+        
+        #legendDiv {
+            width: 375px;
+        }
+        
+        #layerListDiv {
+            width: 375px;
+        }
+        
+        #filterDiv {
+            width: 375px;
+            font-family: Avenir Next W00;
+            font-size: 1em;
+            color: #FDFEFF;
+            background-color: #0079C1;
+        }
+        
+        #optionDiv {
+            color: #5E5E5E;
+            background-color: #FDFEFF;
+        }
+        
+        .introjs-helperNumberLayer {
+            background: #EA7F1E;
+            /* Old browsers */
+            background: -webkit-linear-gradient(top, #EA7F1E 0%, #EA7F1E 100%);
+            /* Chrome10+,Safari5.1+ */
+            background: -webkit-gradient(linear, left top, left bottom, color-stop(0%, #EA7F1E), color-stop(100%, #EA7F1E));
+            /* Chrome,Safari4+ */
+            background: -moz-linear-gradient(top, #EA7F1E 0%, #EA7F1E 100%);
+            /* FF3.6+ */
+            background: -ms-linear-gradient(top, #EA7F1E 0%, #EA7F1E 100%);
+            /* IE10+ */
+            background: -o-linear-gradient(top, #EA7F1E 0%, #EA7F1E 100%);
+            /* Opera 11.10+ */
+            background: linear-gradient(to bottom, #EA7F1E 0%, #EA7F1E 100%);
+            /* W3C */
+        }
+        
+        .introjs-progressbar {
+            background-color: #EA7F1E;
+        }
+        
+        html,
+        body,
+        #viewDiv {
+            background-color: rgb(219, 114, 54);
+            padding: 0;
+            padding-top: 19px;
+            margin: 0;
+            height: 100%;
+            width: 100%;
+        }
+    </style>
+
+</head>
+
+<body>
+    <h1>
+        <nav class="navbar navbar-expand-lg navbar-light fixed-top py-3" id="mainNav">
+            <div class="container">
+                <a class="navbar-brand js-scroll-trigger" href="https://inl.gov/geothermalchallenge/" target="_blank">Geothermal Design Competition | 2020 Submission</a>
+                <button class="navbar-toggler navbar-toggler-right" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+              </button>
+                <div class="collapse navbar-collapse" id="navbarResponsive">
+                    <ul class="navbar-nav ml-auto my-2 my-lg-0">
+                        <li class="nav-item">
+                            <a class="nav-link js-scroll-trigger" href="index.html">Return to Main Page</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    </h1>
+    <div id="viewDiv"></div>
+    <div id="searchDiv"></div>
+    <div id="homeDiv" data-step="8" data-tooltipClass="tooltip" data-position="left" data-intro="Click the home button to return to the original zoom level."></div>
+    <div id="galleryDiv" data-step="7" data-tooltipClass="tooltip" data-position="left" data-intro="Click here to pick a new basemap."></div>
+    <div id="layerListDiv" data-step="2" data-tooltipClass="tooltip" data-position="right" data-intro="These are the data layers. You can toggle them on or off by clicking on them. <a href='https://terpconnect.umd.edu/~eread781/Geothermal/index.html#tutorial' target='blank'>Click here to learn more about the data.</a>">
+        <button id="tour_button" class="esri-button" href="javascript:void(0);" data-step="1" data-tooltipClass="tooltip" data-position="right" data-intro="Let's get you oriented with the features of this map. If you need to see the tour again later, click here.">Start Tour
+            </button>
+    </div>
+    <div id="legendDiv" data-step="4" data-tooltipClass="tooltip" data-position="right" data-intro="Adding data layers to the map will also add them to the legend. As you explore each layer of data, click on a point or area to cue a popup dialog box. The box tells you more about the single piece of data you are looking at. For GDR submissions, you can click on the URL to seamlessly access the GDR page for that submission. Try it!">
+        <button id="cluster" class="esri-button" data-step="3" data-tooltipClass="tooltip" data-position="right" data-intro="For the Geothermal Data Repository (GDR) submission data you can use this button, or zoom in and out, to toggle clustering of the points.">
+                Disable Clustering
+            </button>
+    </div>
+    <div id="timeSliderDiv" data-step="6" data-tooltipClass="tooltip" data-position="auto" data-intro="Use this tool to filter the GDR submission data by year. Select and drag the circles at either end of the timeline to modify the time period visible, and select the play button to animate data through time."></div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.4.1.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
+    <script type="text/javascript">
+        window.onload = function() {
+            Swal.fire({
+                title: 'Welcome!',
+                text: 'Use this map to explore the Geothermal Data Repository. Do you want to take a tour of the features?',
+                confirmButtonText: 'Yes!',
+                showCancelButton: true,
+                cancelButtonText: 'No, thanks.',
+                cancelButtonColor: '#EA7F1E',
+
+            }).then((result) => {
+                if (result.value) {
+                    introJs().setOption('showProgress', true).setOption('showBullets', false).start();
+                }
+            })
+        };
+    </script>
+    <script>
+        $("#tour_button").click(function() {
+            introJs().setOption('showProgress', true).setOption('showBullets', false).start();
+        });
+    </script>
+</body>
+
+</html>
